@@ -9,7 +9,7 @@
 
 #define MMAP_THRESHOLD 128 * 1024 // 128 KB (32 pages)
 #define BLOCK_SIZE sizeof(struct block_meta) // size of a block
-#define PREALLOC_SIZE (MMAP_THRESHOLD) // 128 KB + the size of a block
+#define PREALLOC_SIZE (MMAP_THRESHOLD) // 128 KB
 #define ALIGNMENT_SIZE 8 // 8 bytes for the alignment
 #define ALIGN(x) (((x) + ALIGNMENT_SIZE - 1) & ~(ALIGNMENT_SIZE - 1)) // align macro
 
@@ -31,7 +31,7 @@ struct block_meta *request_space(struct block_meta *last, size_t size, size_t th
 		}
 
 		/* attempt to allocate memory using the sbrk() system call */
-		if (block == (void*) -1) {
+		if ((void*)block == (void*) -1) {
 			DIE(1, "sbrk failed to allocate memory :(");
 			return NULL;
 		}
@@ -99,17 +99,19 @@ struct block_meta *find_memory_block(struct block_meta **last, size_t size) {
 
 void split_block(struct block_meta *block, size_t size) {
 	size = ALIGN(size);
-    /* Check if there is enough space to split the block */
+    /* check if there is enough space to split the block */
     if (block->size <= size + BLOCK_SIZE) {
         return;
     }
 
-    /* Calculate the remaining space after splitting */
+    /* calculate the remaining space after splitting */
     size_t remaining_size = block->size - size - BLOCK_SIZE;
-    if (remaining_size < BLOCK_SIZE + 1) {
+	char one_byte = 1;
+    if (remaining_size < BLOCK_SIZE + one_byte) {
         return;
     }
-    /* Create a new block for the remaining space */
+	remaining_size = ALIGN(remaining_size);
+    /* create a new block for the remaining space */
     struct block_meta *new_block = (struct block_meta *)((char *)block + size + BLOCK_SIZE);
 
     new_block->size = remaining_size;
@@ -139,6 +141,8 @@ void *os_malloc(size_t size)
             return NULL;
         }
         base = block;
+		if (block->size > size)
+			split_block(block, size);
     } else {
         struct block_meta *last = (struct block_meta *)base;
         block = find_memory_block(&last, size);
@@ -258,7 +262,7 @@ void *os_realloc(void *ptr, size_t size)
         return NULL;
     }
 
-    struct block_meta *block = (struct block_meta *) ptr - 1; 
+    struct block_meta *block = (struct block_meta *)ptr - 1;
 
     if (block->status == STATUS_FREE) {
         return NULL;
@@ -266,21 +270,23 @@ void *os_realloc(void *ptr, size_t size)
 
     size = ALIGN(size);
 
-	if (size < block->size) {
-		split_block(block, size);
-	} else {
-		void *expanded_block = expand_block(ptr, size);
-		if (expanded_block) {
-			return expanded_block;
-		} else {
-			void *new_block = os_malloc(size);
-			if (!new_block) {
-				return NULL;
-			}
-			memcpy(new_block, ptr, block->size);
-			os_free(ptr);
-			return new_block;
-		}
+    if (block->size >= size) {
+        split_block(block, size);
+        return ptr;
+    }
+
+	// trying to expand the block
+	void *expanded_ptr = expand_block(ptr, size);
+	if (expanded_ptr) {
+		return expanded_ptr;
 	}
-	return ptr;
+
+	// if the expanding is not possible, alloc another memory zone
+	void *new_ptr = os_malloc(size);
+	if (!new_ptr) {
+		return NULL;
+	}
+	memcpy(new_ptr, ptr, block->size);
+	os_free(ptr);
+	return new_ptr;
 }
