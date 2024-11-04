@@ -307,11 +307,12 @@ void *os_realloc(void *ptr, size_t size)
 		memcpy(new_ptr, ptr, copy_size);
 		os_free(ptr);
 		ptr = new_ptr;
+		goto exit;
 	} else {
 		// if the block size is bigger, then split the block
 		if (block->size >= size) {
 			split_block(block, size);
-			return ptr;
+			goto exit;
 		} else {
 			void *new_block = expand_block(ptr, size);
 
@@ -325,6 +326,8 @@ void *os_realloc(void *ptr, size_t size)
 		memcpy(new_ptr, ptr, copy_size);
 		os_free(ptr);
 		ptr = new_ptr;
+		goto exit;
 	}
-	return ptr;
+	exit:
+		return ptr;
 }
