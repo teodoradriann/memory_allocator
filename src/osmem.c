@@ -7,14 +7,14 @@
 #include "block_meta.h"
 #include "osmem.h"
 
-#define MMAP_THRESHOLD 128 * 1024 // 128 KB (32 pages)
+#define MMAP_THRESHOLD (128 * 1024) // 128 KB (32 pages)
 #define BLOCK_SIZE sizeof(struct block_meta) // size of a block
 #define PREALLOC_SIZE (MMAP_THRESHOLD) // 128 KB
 #define ALIGNMENT_SIZE 8 // 8 bytes for the alignment
 #define ALIGN(x) (((x) + ALIGNMENT_SIZE - 1) & ~(ALIGNMENT_SIZE - 1)) // align macro
 
 /* pointer to the starting point of the heap */
-void* base;
+void *base;
 
 struct block_meta *request_space(struct block_meta *last, size_t size, size_t threshold) {
 	struct block_meta *block;
@@ -31,7 +31,7 @@ struct block_meta *request_space(struct block_meta *last, size_t size, size_t th
 		}
 
 		/* attempt to allocate memory using the sbrk() system call */
-		if ((void*)block == (void*) -1) {
+		if ((void *)block == (void *) -1) {
 			DIE(1, "sbrk failed to allocate memory :(");
 			return NULL;
 		}
@@ -123,6 +123,7 @@ void split_block(struct block_meta *block, size_t size) {
 void *expand_block(void *ptr, size_t size) {
 	coalesce_blocks();
 	struct block_meta *block = (struct block_meta *)((char *)ptr - BLOCK_SIZE);
+
 	struct block_meta *next_block = block->next;
 
 	size = ALIGN(size);
@@ -142,6 +143,7 @@ void *expand_block(void *ptr, size_t size) {
 		size_t increment = size - block->size;
 		increment = ALIGN(increment);
 		void *new_block = sbrk(increment);
+
 		if (new_block == (void *)-1) {
 			DIE(1, "sbrk has failed :(");
 			return NULL;
@@ -158,6 +160,7 @@ void *os_malloc(size_t size) {
 		 return NULL;
 
 	struct block_meta *block;
+
 	size = ALIGN(size);
 
 	if (!base) {
@@ -170,6 +173,7 @@ void *os_malloc(size_t size) {
 		}
 	} else {
 		struct block_meta *last = (struct block_meta *)base;
+
 		block = find_memory_block(&last, size);
 		if (block) {
             if (block->size > size)
@@ -177,7 +181,8 @@ void *os_malloc(size_t size) {
 			block->status = STATUS_ALLOC;
 		} else {
 			// trying to expand the last block if it's available
-			block = (struct block_meta*) base;
+			block = (struct block_meta *) base;
+
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
@@ -233,6 +238,7 @@ void *os_calloc(size_t nmemb, size_t size)
 	size_to_be_allocated = ALIGN(size_to_be_allocated);
 
 	struct block_meta *block;
+
 	if (!base) {
 		block = request_space(NULL, size_to_be_allocated, getpagesize());
 		if (!block)
@@ -242,6 +248,7 @@ void *os_calloc(size_t nmemb, size_t size)
 			split_block(block, size_to_be_allocated);
 	} else {
 		struct block_meta *last = (struct block_meta *)base;
+
 		block = find_memory_block(&last, size_to_be_allocated);
 		if (block) {
 			if (block->size > size_to_be_allocated)
@@ -253,7 +260,7 @@ void *os_calloc(size_t nmemb, size_t size)
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = (struct block_meta*)expand_block(block, size_to_be_allocated - block->size);
+				block = (struct block_meta *)expand_block(block, size_to_be_allocated - block->size);
 			} else {
 				// no block found call the OS for more space
 				block = request_space(last, size_to_be_allocated, getpagesize());
@@ -287,6 +294,7 @@ void *os_realloc(void *ptr, size_t size)
 
 	if (block->status == STATUS_MAPPED) {
 		void *new_ptr = os_malloc(size);
+
 		if (!new_ptr)
 			return NULL;
 		memcpy(new_ptr, ptr, copy_size);
@@ -299,15 +307,17 @@ void *os_realloc(void *ptr, size_t size)
 			return ptr;
 		} else {
 			void *new_block = expand_block(ptr, size);
+
 			if (new_block)
 				return new_block;
 		}
 		void *new_ptr = os_malloc(size);
+
 		if (!new_ptr)
 			return NULL;
 		memcpy(new_ptr, ptr, copy_size);
 		os_free(ptr);
 		return new_ptr;
 	}
-	return NULL;
+	return ptr;
 }
