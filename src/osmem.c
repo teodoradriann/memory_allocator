@@ -306,7 +306,7 @@ void *os_realloc(void *ptr, size_t size)
 			return NULL;
 		memcpy(new_ptr, ptr, copy_size);
 		os_free(ptr);
-		return new_ptr;
+		ptr = new_ptr;
 	} else {
 		// if the block size is bigger, then split the block
 		if (block->size >= size) {
@@ -324,7 +324,7 @@ void *os_realloc(void *ptr, size_t size)
 			return NULL;
 		memcpy(new_ptr, ptr, copy_size);
 		os_free(ptr);
-		return new_ptr;
+		ptr = new_ptr;
 	}
 	return ptr;
 }
