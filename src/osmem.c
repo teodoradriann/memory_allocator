@@ -328,6 +328,6 @@ void *os_realloc(void *ptr, size_t size)
 		ptr = new_ptr;
 		goto exit;
 	}
-	exit:
-		return ptr;
+exit:
+	return ptr;
 }
