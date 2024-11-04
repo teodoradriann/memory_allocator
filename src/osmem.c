@@ -149,14 +149,12 @@ void *expand_block(void *ptr, size_t size)
 		size_t increment = size - block->size;
 
 		increment = ALIGN(increment);
-		void *new_block = sbrk(increment);
-
-		if (new_block == (void *)-1) {
+		if (sbrk(increment) == (void *)-1) {
 			DIE(1, "sbrk has failed :(");
 			return NULL;
 		}
 		block->size += increment;
-		return ptr;
+		return block + 1;
 	}
 
 	return NULL;
