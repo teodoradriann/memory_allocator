@@ -14,7 +14,7 @@
 #define ALIGN(x) (((x) + ALIGNMENT_SIZE - 1) & ~(ALIGNMENT_SIZE - 1)) // align macro
 
 /* pointer to the starting point of the heap */
-void* base = NULL;
+void* base;
 
 struct block_meta *request_space(struct block_meta *last, size_t size, size_t threshold) {
 	struct block_meta *block;
@@ -31,7 +31,7 @@ struct block_meta *request_space(struct block_meta *last, size_t size, size_t th
 		}
 
 		/* attempt to allocate memory using the sbrk() system call */
-		if (block == (void*) -1) {
+		if ((void*)block == (void*) -1) {
 			DIE(1, "sbrk failed to allocate memory :(");
 			return NULL;
 		}
@@ -53,7 +53,6 @@ struct block_meta *request_space(struct block_meta *last, size_t size, size_t th
 	/* connect the last block to the new one */
 	if (last)
 		last->next = block;
-	allocated_size = ALIGN(allocated_size);
 	block->size = allocated_size;
 	block->next = NULL;
 	block->prev = last;
@@ -62,21 +61,18 @@ struct block_meta *request_space(struct block_meta *last, size_t size, size_t th
 }
 
 void coalesce_blocks() {
-	struct block_meta *block = (struct block_meta *)base;
-	size_t merged_size;
-	
-	while (block) {
-        struct block_meta *next_block = block->next;
-        if (block->status == STATUS_FREE && next_block && next_block->status == STATUS_FREE) {
-				merged_size = block->size + block->next->size + BLOCK_SIZE;
-				merged_size = ALIGN(merged_size);
-                block->size = merged_size;
+    struct block_meta *block = (struct block_meta *)base;
+
+    while (block) {
+        if (block->status == STATUS_FREE) {
+            while (block->next && block->next->status == STATUS_FREE) {
+                block->size += block->next->size + BLOCK_SIZE;
                 block->next = block->next->next;
                 if (block->next)
                     block->next->prev = block;
-        } else {
-			block = block->next;
-		}
+            }
+        }
+        block = block->next;
     }
 }
 
@@ -101,30 +97,61 @@ struct block_meta *find_memory_block(struct block_meta **last, size_t size) {
 }
 
 void split_block(struct block_meta *block, size_t size) {
-    /* calculate the remaining space after splitting */
-    size_t remaining_size = block->size - size;
-    
-	if (remaining_size <= BLOCK_SIZE)
-        return;
+    size = ALIGN(size);
 
-	remaining_size = ALIGN(remaining_size);
-    /* create a new block for the remaining space */
-    struct block_meta *new_block = (struct block_meta *)((char *)block + size + BLOCK_SIZE);
+    if (block->size >= size + BLOCK_SIZE + ALIGNMENT_SIZE) {
+        struct block_meta *new_block = (struct block_meta *)((char *)block + BLOCK_SIZE + size);
 
-    new_block->size = remaining_size - BLOCK_SIZE;
-    new_block->status = STATUS_FREE;
+        new_block->size = block->size - size - BLOCK_SIZE;
+        new_block->size = ALIGN(new_block->size);
 
-    new_block->next = block->next;
-    new_block->prev = block;
-    if (new_block->next)
-        new_block->next->prev = new_block;
+        new_block->status = STATUS_FREE;
+        new_block->next = block->next;
+        new_block->prev = block;
 
-    block->size = size;
-    block->next = new_block;
+        if (new_block->next)
+            new_block->next->prev = new_block;
+
+        block->size = size;
+        block->next = new_block;
+    }
 }
 
-void *os_malloc(size_t size)
-{
+void *expand_block(void *ptr, size_t size) {
+    coalesce_blocks();
+    struct block_meta *block = (struct block_meta *)((char *)ptr - BLOCK_SIZE);
+    struct block_meta *next_block = block->next;
+
+	size = ALIGN(size);
+
+    if (next_block && next_block->status == STATUS_FREE) {
+        if (block->size + next_block->size + BLOCK_SIZE >= size) {
+            block->size += next_block->size + BLOCK_SIZE;
+            block->next = next_block->next;
+            if (next_block->next) {
+                next_block->next->prev = block;
+            }
+            return ptr;
+        }
+    }
+
+    // If next_block is null then we need to allocate more memory to expand
+	if (!next_block) {
+		size_t increment = size - block->size;
+		increment = ALIGN(increment);
+		void *new_block = sbrk(increment);
+		if (new_block == (void *)-1) {
+			DIE(1, "sbrk has failed :(");
+			return NULL;
+		}
+		block->size += increment;
+		return ptr;
+	}
+
+    return NULL;
+}
+
+void *os_malloc(size_t size) {
     if (size <= 0)
         return NULL;
 
@@ -136,25 +163,34 @@ void *os_malloc(size_t size)
         if (!block)
             return NULL;
         base = block;
-		if (block->size > size)
+		if (block->size > size) {
 			split_block(block, size);
+		}
     } else {
         struct block_meta *last = (struct block_meta *)base;
         block = find_memory_block(&last, size);
-        if (!block) {
-            block = request_space(last, size, MMAP_THRESHOLD);
-            if (!block)
-                return NULL;
+        if (block) {
+            if (block->size > size) {
+                split_block(block, size);
+            }
+            block->status = STATUS_ALLOC;
         } else {
-			if (block->size > size)
-				split_block(block, size);
-			else {
-				block->size = size;
+			// trying to expand the last block if it's available
+			block = (struct block_meta*) base;
+			while (block->next) {
+				block = block->next;
 			}
-			block->status = STATUS_ALLOC;
-		}
+			if (block->status == STATUS_FREE) {
+				expand_block(block, size - block->size);
+			} else {
+				// no block found call the OS for more space
+				block = request_space(last, size, MMAP_THRESHOLD);
+            	if (!block)
+                	return NULL;
+			}
+        }
     }
-    return (void *)(block + 1);
+    return (block + 1);
 }
 
 
@@ -163,7 +199,7 @@ void os_free(void *ptr)
     if (!ptr)
         return;
 
-    struct block_meta *block = (struct block_meta *) ptr - 1;
+    struct block_meta *block = (struct block_meta *)((char *)ptr - BLOCK_SIZE);
 
     /* if the block is allocated with mmap, then use munmap, else just set it to FREE */
     if (block->status == STATUS_MAPPED) {
@@ -190,6 +226,10 @@ void *os_calloc(size_t nmemb, size_t size)
         return NULL;
 
 	size_t size_to_be_allocated = nmemb * size;
+
+	if (size_to_be_allocated <= 0)
+		return NULL;
+
 	size_to_be_allocated = ALIGN(size_to_be_allocated);
 
 	struct block_meta *block;
@@ -198,55 +238,35 @@ void *os_calloc(size_t nmemb, size_t size)
 		if (!block)
 			return NULL;
 		base = block;
+		if (block->size > size_to_be_allocated)
+			split_block(block, size_to_be_allocated);
 	} else {
 		struct block_meta *last = (struct block_meta *)base;
 		block = find_memory_block(&last, size_to_be_allocated);
-		if (!block) {
-			block = request_space(last, size_to_be_allocated, getpagesize());
-			if (!block)
-				return NULL;
-		} else {
-			if (block->size > size_to_be_allocated) {
+		if (block) {
+            if (block->size > size_to_be_allocated) {
                 split_block(block, size_to_be_allocated);
-            } else {
-				block->size = size_to_be_allocated;
+            }
+            block->status = STATUS_ALLOC;
+        } else {
+			// trying to expand the last block if it's available
+			block = (struct block_meta *)base;
+			while (block->next) {
+				block = block->next;
 			}
-			block->status = STATUS_ALLOC;
-		}
+			if (block->status == STATUS_FREE) {
+				expand_block(block, size_to_be_allocated - block->size);
+			} else {
+				// no block found call the OS for more space
+				block = request_space(last, size_to_be_allocated, getpagesize());
+				if (!block)
+                	return NULL;
+			}
+        }
 	}
 
 	memset(block + 1, 0, block->size);
-	return (void *)(block + 1);
-}
-
-void *expand_block(void *ptr, size_t size) {
-    coalesce_blocks();
-    struct block_meta *block = (struct block_meta *)ptr - 1;
-    struct block_meta *next_block = block->next;
-
-    if (next_block && next_block->status == STATUS_FREE) {
-        if (block->size + next_block->size + BLOCK_SIZE >= size) {
-            block->size += next_block->size + BLOCK_SIZE;
-            block->next = next_block->next;
-            if (next_block->next)
-                next_block->next->prev = block;
-            return ptr;
-        }
-    }
-
-    // if next_block is null then we need to allocate more memory to expand
-    if (!next_block) {
-		if (block->size < size) {
-			void *new_block = sbrk(size - block->size);
-			if (new_block == (void *)-1) {
-				DIE(1, "sbrk failed to allocate memory :(");
-				return NULL;
-			}
-			block->size = size;
-			return ptr;
-		}
-    }
-	return NULL;
+	return block + 1;
 }
 
 void *os_realloc(void *ptr, size_t size)
@@ -260,7 +280,7 @@ void *os_realloc(void *ptr, size_t size)
     }
 	
 	size = ALIGN(size);
-    struct block_meta *block = (struct block_meta *)ptr - 1;
+    struct block_meta *block = (struct block_meta *)((char *)ptr - BLOCK_SIZE);
 
     if (block->status == STATUS_FREE)
         return NULL;
@@ -278,7 +298,8 @@ void *os_realloc(void *ptr, size_t size)
 	void *new_ptr = os_malloc(size);
 	if (!new_ptr)
 		return NULL;
-	memcpy(new_ptr, ptr, block->size);
+	size_t copy_size = (block->size < size) ? block->size : size;
+	memcpy(new_ptr, ptr, copy_size);
 	os_free(ptr);
 	return new_ptr;
 }
