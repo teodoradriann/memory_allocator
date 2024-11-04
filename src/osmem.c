@@ -60,19 +60,20 @@ struct block_meta *request_space(struct block_meta *last, size_t size, size_t th
 	return block;
 }
 
-void coalesce_blocks() {
+void coalesce_blocks(void) {
 	struct block_meta *block = (struct block_meta *)base;
 	size_t merged_size;
 
 	while (block) {
 		struct block_meta *next_block = block->next;
+
 		if (block->status == STATUS_FREE && next_block && next_block->status == STATUS_FREE) {
-				merged_size = block->size + block->next->size + BLOCK_SIZE;
-				merged_size = ALIGN(merged_size);
-				block->size = merged_size;
-				block->next = block->next->next;
-				if (block->next)
-					block->next->prev = block;
+			merged_size = block->size + block->next->size + BLOCK_SIZE;
+			merged_size = ALIGN(merged_size);
+			block->size = merged_size;
+			block->next = block->next->next;
+			if (block->next)
+				block->next->prev = block;
 		} else {
 			block = block->next;
 		}
@@ -141,6 +142,7 @@ void *expand_block(void *ptr, size_t size) {
 	// if next_block is null then we need to allocate more memory to expand
 	if (!next_block) {
 		size_t increment = size - block->size;
+
 		increment = ALIGN(increment);
 		void *new_block = sbrk(increment);
 
@@ -157,7 +159,7 @@ void *expand_block(void *ptr, size_t size) {
 
 void *os_malloc(size_t size) {
 	if (size <= 0)
-		 return NULL;
+		return NULL;
 
 	struct block_meta *block;
 
@@ -168,16 +170,15 @@ void *os_malloc(size_t size) {
 		if (!block)
 			return NULL;
 		base = block;
-		if (block->size > size) {
+		if (block->size > size)
 			split_block(block, size);
-		}
 	} else {
 		struct block_meta *last = (struct block_meta *)base;
 
 		block = find_memory_block(&last, size);
 		if (block) {
-            if (block->size > size)
-                split_block(block, size);
+			if (block->size > size)
+				split_block(block, size);
 			block->status = STATUS_ALLOC;
 		} else {
 			// trying to expand the last block if it's available
@@ -186,7 +187,7 @@ void *os_malloc(size_t size) {
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = (struct block_meta*)expand_block(block, size - block->size);
+				block = (struct block_meta *)expand_block(block, size - block->size);
 			} else {
 				// no block found call the OS for more space
 				block = request_space(last, size, MMAP_THRESHOLD);
