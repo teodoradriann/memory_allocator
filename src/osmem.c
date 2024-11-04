@@ -16,7 +16,8 @@
 /* pointer to the starting point of the heap */
 void *base;
 
-struct block_meta *request_space(struct block_meta *last, size_t size, size_t threshold) {
+struct block_meta *request_space(struct block_meta *last, size_t size, size_t threshold)
+{
 	struct block_meta *block;
 	size_t allocated_size;
 	/* check if the request space is less than the threshold */
@@ -60,7 +61,8 @@ struct block_meta *request_space(struct block_meta *last, size_t size, size_t th
 	return block;
 }
 
-void coalesce_blocks(void) {
+void coalesce_blocks(void)
+{
 	struct block_meta *block = (struct block_meta *)base;
 	size_t merged_size;
 
@@ -80,7 +82,8 @@ void coalesce_blocks(void) {
 	}
 }
 
-struct block_meta *find_memory_block(struct block_meta **last, size_t size) {
+struct block_meta *find_memory_block(struct block_meta **last, size_t size)
+{
 	coalesce_blocks();
 	struct block_meta *block = (struct block_meta *)base;
 	struct block_meta *best_block = NULL;
@@ -100,7 +103,8 @@ struct block_meta *find_memory_block(struct block_meta **last, size_t size) {
 	return best_block;
 }
 
-void split_block(struct block_meta *block, size_t size) {
+void split_block(struct block_meta *block, size_t size)
+{
 	size = ALIGN(size);
 
 	if (block->size >= size + BLOCK_SIZE + ALIGNMENT_SIZE) {
@@ -121,7 +125,8 @@ void split_block(struct block_meta *block, size_t size) {
 	}
 }
 
-void *expand_block(void *ptr, size_t size) {
+void *expand_block(void *ptr, size_t size)
+{
 	coalesce_blocks();
 	struct block_meta *block = (struct block_meta *)((char *)ptr - BLOCK_SIZE);
 
@@ -157,7 +162,8 @@ void *expand_block(void *ptr, size_t size) {
 	return NULL;
 }
 
-void *os_malloc(size_t size) {
+void *os_malloc(size_t size)
+{
 	if (size <= 0)
 		return NULL;
 
