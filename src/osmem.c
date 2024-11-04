@@ -297,20 +297,24 @@ void *os_realloc(void *ptr, size_t size)
 		return NULL;
 
 	size = ALIGN(size);
-	size_t copy_size = (block->size < size) ? block->size : size;
+	// if size is already the same return
+	if (block->size == size)
+		return ptr;
+
+	size_t movable_size = (block->size < size) ? block->size : size;
 
 	if (block->status == STATUS_MAPPED) {
-		void *new_ptr = os_malloc(size);
+		void *new_block = os_malloc(size);
 
-		if (!new_ptr)
+		if (!new_block)
 			return NULL;
-		memcpy(new_ptr, ptr, copy_size);
+		memcpy(new_block, ptr, movable_size);
 		os_free(ptr);
-		ptr = new_ptr;
+		ptr = new_block;
 		goto exit;
 	} else {
 		// if the block size is bigger, then split the block
-		if (block->size >= size) {
+		if (block->size > size) {
 			split_block(block, size);
 			goto exit;
 		} else {
@@ -319,13 +323,13 @@ void *os_realloc(void *ptr, size_t size)
 			if (new_block)
 				return new_block;
 		}
-		void *new_ptr = os_malloc(size);
+		void *new_block = os_malloc(size);
 
-		if (!new_ptr)
+		if (!new_block)
 			return NULL;
-		memcpy(new_ptr, ptr, copy_size);
+		memcpy(new_block, ptr, movable_size);
 		os_free(ptr);
-		ptr = new_ptr;
+		ptr = new_block;
 		goto exit;
 	}
 exit:
