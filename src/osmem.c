@@ -107,7 +107,7 @@ void split_block(struct block_meta *block, size_t size)
 {
 	size = ALIGN(size);
 
-	if (block->size >= size + BLOCK_SIZE + ALIGNMENT_SIZE) {
+	if (block->size >= size + BLOCK_SIZE + sizeof(char)) {
 		struct block_meta *new_block = (struct block_meta *)((char *)block + BLOCK_SIZE + size);
 
 		new_block->size = block->size - size - BLOCK_SIZE;
