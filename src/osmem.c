@@ -290,7 +290,7 @@ void *os_realloc(void *ptr, size_t size)
 	}
 
 	struct block_meta *block = (struct block_meta *)((char *)ptr - BLOCK_SIZE);
-	//if (!block) return NULL;
+
 	if (block->status == STATUS_FREE)
 		return NULL;
 
@@ -302,8 +302,10 @@ void *os_realloc(void *ptr, size_t size)
 	size_t movable_size = (block->size < size) ? block->size : size;
 
 	if (block->status == STATUS_MAPPED) {
-		/* set the base to null to prealloc the correct size if its 
-		the only block in list */
+		/*
+		set the base to null to prealloc the correct size if its
+		the only block in list
+		*/
 		if (!block->next && !block->prev)
 			base = NULL;
 		void *new_block = os_malloc(size);
