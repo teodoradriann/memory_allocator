@@ -69,23 +69,23 @@ struct block_meta *request_space(struct block_meta *previous, size_t size, size_
 
 void coalesce_blocks(void)
 {
-	struct block_meta *block = (struct block_meta *)base;
+    struct block_meta *block = (struct block_meta *)base;
 	size_t merged_size;
-	/* traverse all the memory blocks, if 2 blocks next to each other are free, merge them */
-	while (block) {
-		struct block_meta *next_block = block->next;
 
-		if (block->status == STATUS_FREE && next_block && next_block->status == STATUS_FREE) {
-			merged_size = block->size + block->next->size + BLOCK_SIZE;
+    /* traverse all memory blocks, merging adjacent free blocks */
+    while (block && block->next) {
+        if (block->status == STATUS_FREE && block->next->status == STATUS_FREE) {
+            merged_size = block->next->size + BLOCK_SIZE;
 			merged_size = ALIGN(merged_size);
-			block->size = merged_size;
-			block->next = block->next->next;
-			if (block->next)
-				block->next->prev = block;
-		} else {
-			block = block->next;
-		}
-	}
+			block->size += merged_size;
+            block->next = block->next->next;
+            if (block->next) {
+                block->next->prev = block;
+            }
+            continue;
+        }
+        block = block->next;
+    }
 }
 
 struct block_meta *find_memory_block(struct block_meta **previous, size_t size)
@@ -135,7 +135,6 @@ void split_block(struct block_meta *block, size_t size)
 
 struct block_meta *expand_block(void *ptr, size_t size, int where)
 {
-	coalesce_blocks();
 	struct block_meta *block = (struct block_meta *)((char *)ptr - BLOCK_SIZE);
 
 	struct block_meta *next_block = block->next;
