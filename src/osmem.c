@@ -69,28 +69,28 @@ struct block_meta *request_space(struct block_meta *previous, size_t size, size_
 
 void coalesce_blocks(void)
 {
-    struct block_meta *block = (struct block_meta *)base;
+	struct block_meta *block = (struct block_meta *)base;
 	size_t merged_size;
 
     /* traverse all memory blocks, merging adjacent free blocks */
-    while (block && block->next) {
-        if (block->status == STATUS_FREE && block->next->status == STATUS_FREE) {
-            merged_size = block->next->size + BLOCK_SIZE;
+	while (block && block->next) {
+		if (block->status == STATUS_FREE && block->next->status == STATUS_FREE) {
+			merged_size = block->next->size + BLOCK_SIZE;
 			merged_size = ALIGN(merged_size);
 			block->size += merged_size;
-            block->next = block->next->next;
-            if (block->next) {
-                block->next->prev = block;
-            }
-            continue;
-        }
-        block = block->next;
-    }
+			block->next = block->next->next;
+			if (block->next) {
+				block->next->prev = block;
+			}
+			continue;
+		}
+		block = block->next;
+	}
 }
 
 struct block_meta *find_memory_block(struct block_meta **previous, size_t size)
 {
-	// first coalesce the free blocks, then traverse all the memory blocks 
+	// first coalesce the free blocks, then traverse all the memory blocks
 	// and find the smallest one that fits
 	coalesce_blocks();
 	struct block_meta *block = (struct block_meta *)base;
@@ -114,7 +114,7 @@ struct block_meta *find_memory_block(struct block_meta **previous, size_t size)
 void split_block(struct block_meta *block, size_t size)
 {
 	size = ALIGN(size);
-	// if another block fits into this one, split the current one */
+	// if another block fits into this one, split the current one
 	if (block->size >= size + BLOCK_SIZE + sizeof(char)) {
 		struct block_meta *new_block = (struct block_meta *)((char *)block + BLOCK_SIZE + size);
 
@@ -287,7 +287,8 @@ void *os_calloc(size_t nmemb, size_t size)
 	return block + 1;
 }
 
-void *realloc_new_block(struct block_meta *block, void *ptr, size_t size, size_t movable_size) {
+void *realloc_new_block(struct block_meta *block, void *ptr, size_t size, size_t movable_size)
+{
 	// set the base to null to prealloc the correct size if its
 	// the only block in list
 	if (!block->next && !block->prev)
