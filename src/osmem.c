@@ -24,6 +24,7 @@ struct block_meta *request_space(struct block_meta *previous, size_t size, size_
 {
 	struct block_meta *block;
 	size_t allocated_size;
+	size = ALIGN(size);
 	/* check if the request space is less than the threshold */
 	if (BLOCK_SIZE + size < threshold) {
 		/* prealloc 128 KB of memory */
@@ -197,7 +198,8 @@ void *os_malloc(size_t size)
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = (expand((char *) block + BLOCK_SIZE, size, MALLOC)) - 1;
+				block = expand((char *) block + BLOCK_SIZE, size, MALLOC);
+				block = block - 1;
 				block->status = STATUS_ALLOC;
 			} else {
 				// no block found call the OS for more space
@@ -273,7 +275,8 @@ void *os_calloc(size_t nmemb, size_t size)
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = (expand((char *) block + BLOCK_SIZE, size_to_be_allocated, CALLOC)) - 1;
+				block = expand((char *) block + BLOCK_SIZE, size_to_be_allocated, CALLOC);
+				block = block - 1;
 				block->status = STATUS_ALLOC;
 			} else {
 				// no block found call the OS for more space
