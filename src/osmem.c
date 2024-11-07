@@ -205,7 +205,8 @@ void *os_malloc(size_t size)
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = expand(block, size - block->size, MALLOC);
+				block = (expand((char *) block + BLOCK_SIZE, size, MALLOC)) - 1;
+				block->status = STATUS_ALLOC;
 			} else {
 				// no block found call the OS for more space
 				block = request_space(previous, size, MMAP_THRESHOLD);
@@ -280,7 +281,8 @@ void *os_calloc(size_t nmemb, size_t size)
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = expand(block, size_to_be_allocated - block->size, CALLOC);
+				block = (expand((char *) block + BLOCK_SIZE, size_to_be_allocated, CALLOC)) - 1;
+				block->status = STATUS_ALLOC;
 			} else {
 				// no block found call the OS for more space
 				block = request_space(previous, size_to_be_allocated, getpagesize());
