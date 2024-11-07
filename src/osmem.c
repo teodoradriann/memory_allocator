@@ -134,10 +134,8 @@ void split(struct block_meta *block, size_t size)
 	}
 }
 
-struct block_meta *expand(void *ptr, size_t size, int where)
+struct block_meta *expand(struct block_meta *block, size_t size, int where)
 {
-	struct block_meta *block = (struct block_meta *)((char *)ptr - BLOCK_SIZE);
-
 	struct block_meta *next_block = block->next;
 
 	size = ALIGN(size);
@@ -149,7 +147,7 @@ struct block_meta *expand(void *ptr, size_t size, int where)
 				block->next = next_block->next;
 				if (next_block->next)
 					next_block->next->prev = block;
-				return (block + 1);
+				return block;
 			}
 		}
 	}
@@ -163,7 +161,7 @@ struct block_meta *expand(void *ptr, size_t size, int where)
 			return NULL;
 		}
 		block->size += increment;
-		return (block + 1);
+		return block;
 	}
 	return NULL;
 }
@@ -199,8 +197,7 @@ void *os_malloc(size_t size)
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = expand((char *) block + BLOCK_SIZE, size, MALLOC);
-				block = block - 1;
+				expand(block, size, MALLOC);
 				block->status = STATUS_ALLOC;
 			} else {
 				// no block found call the OS for more space
@@ -276,8 +273,7 @@ void *os_calloc(size_t nmemb, size_t size)
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = expand((char *) block + BLOCK_SIZE, size_to_be_allocated, CALLOC);
-				block = block - 1;
+				expand(block, size_to_be_allocated, CALLOC);
 				block->status = STATUS_ALLOC;
 			} else {
 				// no block found call the OS for more space
@@ -330,7 +326,8 @@ void *os_realloc(void *ptr, size_t size)
 	size_t movable_size = (block->size < size) ? block->size : size;
 
 	if (block->status == STATUS_MAPPED) {
-		ptr = realloc_new_block(block, ptr, size, movable_size);
+		block = (struct block_meta *)realloc_new_block(block, ptr, size, movable_size);
+		block = block - 1;
 	} else {
 		// if the block size is bigger, then split the block
 		if (block->size > size) {
@@ -338,12 +335,13 @@ void *os_realloc(void *ptr, size_t size)
 			goto exit;
 		} else {
 			// if the block size is smaller, try to expand the block
-			if (expand(ptr, size, REALLOC))
-				return ptr;
+			if (expand(block, size, REALLOC))
+				goto exit;
 		}
 		// ultimately, if nothing works, realloc elsewhere
-		ptr = realloc_new_block(block, ptr, size, movable_size);
+		block = (struct block_meta *)realloc_new_block(block, ptr, size, movable_size);
+		block = block - 1;
 	}
 exit:
-	return ptr;
+	return block + 1;
 }
