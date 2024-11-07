@@ -20,14 +20,6 @@
 /* pointer to the starting point of the heap */
 void *base;
 
-void print_list() {
-	struct block_meta *block = (struct block_meta *) base;
-	while (block) {
-		printf("%p status = %d", block, block->status);
-		block = block->next;
-	}
-}
-
 struct block_meta *request_space(struct block_meta *previous, size_t size, size_t threshold)
 {
 	struct block_meta *block;
