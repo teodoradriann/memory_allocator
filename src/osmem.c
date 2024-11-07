@@ -20,6 +20,14 @@
 /* pointer to the starting point of the heap */
 void *base;
 
+void print_list() {
+	struct block_meta *block = (struct block_meta *) base;
+	while (block) {
+		printf("%p status = %d", block, block->status);
+		block = block->next;
+	}
+}
+
 struct block_meta *request_space(struct block_meta *previous, size_t size, size_t threshold)
 {
 	struct block_meta *block;
@@ -67,7 +75,7 @@ struct block_meta *request_space(struct block_meta *previous, size_t size, size_
 	return block;
 }
 
-void coalesce_blocks(void)
+void coalesce(void)
 {
 	struct block_meta *block = (struct block_meta *)base;
 	size_t merged_size;
@@ -79,9 +87,8 @@ void coalesce_blocks(void)
 			merged_size = ALIGN(merged_size);
 			block->size += merged_size;
 			block->next = block->next->next;
-			if (block->next) {
+			if (block->next)
 				block->next->prev = block;
-			}
 			continue;
 		}
 		block = block->next;
@@ -92,7 +99,7 @@ struct block_meta *find_memory_block(struct block_meta **previous, size_t size)
 {
 	// first coalesce the free blocks, then traverse all the memory blocks
 	// and find the smallest one that fits
-	coalesce_blocks();
+	coalesce();
 	struct block_meta *block = (struct block_meta *)base;
 	struct block_meta *best_block = NULL;
 	size_t best_size = SIZE_MAX;
@@ -111,7 +118,7 @@ struct block_meta *find_memory_block(struct block_meta **previous, size_t size)
 	return best_block;
 }
 
-void split_block(struct block_meta *block, size_t size)
+void split(struct block_meta *block, size_t size)
 {
 	size = ALIGN(size);
 	// if another block fits into this one, split the current one
@@ -133,7 +140,7 @@ void split_block(struct block_meta *block, size_t size)
 	}
 }
 
-struct block_meta *expand_block(void *ptr, size_t size, int where)
+struct block_meta *expand(void *ptr, size_t size, int where)
 {
 	struct block_meta *block = (struct block_meta *)((char *)ptr - BLOCK_SIZE);
 
@@ -182,14 +189,14 @@ void *os_malloc(size_t size)
 			return NULL;
 		base = block;
 		if (block->size > size)
-			split_block(block, size);
+			split(block, size);
 	} else {
 		struct block_meta *previous = (struct block_meta *)base;
 
 		block = find_memory_block(&previous, size);
 		if (block) {
-			if (block->size >= size)
-				split_block(block, size);
+			if (block->size > size)
+				split(block, size);
 			block->status = STATUS_ALLOC;
 		} else {
 			// trying to expand the previous block if it's available
@@ -198,7 +205,7 @@ void *os_malloc(size_t size)
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = expand_block(block, size - block->size, MALLOC);
+				block = expand(block, size - block->size, MALLOC);
 			} else {
 				// no block found call the OS for more space
 				block = request_space(previous, size, MMAP_THRESHOLD);
@@ -257,7 +264,7 @@ void *os_calloc(size_t nmemb, size_t size)
 			return NULL;
 		base = block;
 		if (block->size > size_to_be_allocated)
-			split_block(block, size_to_be_allocated);
+			split(block, size_to_be_allocated);
 	} else {
 		struct block_meta *previous = (struct block_meta *)base;
 
@@ -265,7 +272,7 @@ void *os_calloc(size_t nmemb, size_t size)
 		// if the block is found and the size is bigger, split it
 		if (block) {
 			if (block->size > size_to_be_allocated)
-				split_block(block, size_to_be_allocated);
+				split(block, size_to_be_allocated);
 			block->status = STATUS_ALLOC;
 		} else {
 			// trying to expand the previous block if it's available
@@ -273,7 +280,7 @@ void *os_calloc(size_t nmemb, size_t size)
 			while (block->next)
 				block = block->next;
 			if (block->status == STATUS_FREE) {
-				block = expand_block(block, size_to_be_allocated - block->size, CALLOC);
+				block = expand(block, size_to_be_allocated - block->size, CALLOC);
 			} else {
 				// no block found call the OS for more space
 				block = request_space(previous, size_to_be_allocated, getpagesize());
@@ -329,11 +336,11 @@ void *os_realloc(void *ptr, size_t size)
 	} else {
 		// if the block size is bigger, then split the block
 		if (block->size > size) {
-			split_block(block, size);
+			split(block, size);
 			goto exit;
 		} else {
 			// if the block size is smaller, try to expand the block
-			if (expand_block(ptr, size, REALLOC))
+			if (expand(ptr, size, REALLOC))
 				return ptr;
 		}
 		// ultimately, if nothing works, realloc elsewhere
