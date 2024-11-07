@@ -24,6 +24,7 @@ struct block_meta *request_space(struct block_meta *previous, size_t size, size_
 {
 	struct block_meta *block;
 	size_t allocated_size;
+
 	size = ALIGN(size);
 	/* check if the request space is less than the threshold */
 	if (BLOCK_SIZE + size < threshold) {
