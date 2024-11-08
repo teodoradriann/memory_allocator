@@ -16,7 +16,6 @@
 #define BLOCK_SIZE sizeof(struct block_meta) // size of a block
 #define ALIGNMENT_SIZE 8 // 8 bytes for the alignment
 #define ALIGN(x) (((x) + ALIGNMENT_SIZE - 1) & ~(ALIGNMENT_SIZE - 1)) // align macro
-
 /* pointer to the starting point of the heap */
 void *base;
 
@@ -41,7 +40,6 @@ struct block_meta *request_space(struct block_meta *previous, size_t size, size_
 		/* attempt to allocate memory using the sbrk() system call */
 		if ((void *)block == (void *) -1) {
 			DIE(1, "sbrk failed to allocate memory :(");
-			return NULL;
 		}
 
 		block->status = STATUS_ALLOC;
@@ -54,7 +52,6 @@ struct block_meta *request_space(struct block_meta *previous, size_t size, size_
 
 		if (block == MAP_FAILED) {
 			DIE(1, "mmap failed to allocate memory :(");
-			return NULL;
 		}
 		allocated_size = size;
 		block->status = STATUS_MAPPED;
@@ -89,7 +86,7 @@ void coalesce(void)
 	}
 }
 
-struct block_meta *find_memory_block(struct block_meta **previous, size_t size)
+struct block_meta *find_memory_block(struct block_meta **previous, size_t size, size_t threshold)
 {
 	// first coalesce the free blocks, then traverse all the memory blocks
 	// and find the smallest one that fits
@@ -99,7 +96,7 @@ struct block_meta *find_memory_block(struct block_meta **previous, size_t size)
 	size_t best_size = SIZE_MAX;
 
 	while (block) {
-		if (block->status == STATUS_FREE && block->size >= size) {
+		if (block->status == STATUS_FREE && block->size >= size && size < threshold) {
 			if (block->size < best_size) {
 				best_size = block->size;
 				best_block = block;
@@ -158,7 +155,6 @@ struct block_meta *expand(struct block_meta *block, size_t size, int where)
 		increment = ALIGN(increment);
 		if (sbrk(increment) == (void *)-1) {
 			DIE(1, "sbrk has failed :(");
-			return NULL;
 		}
 		block->size += increment;
 		return block;
@@ -185,7 +181,7 @@ void *os_malloc(size_t size)
 	} else {
 		struct block_meta *previous = (struct block_meta *)base;
 
-		block = find_memory_block(&previous, size);
+		block = find_memory_block(&previous, size, MMAP_THRESHOLD);
 		if (block) {
 			if (block->size > size)
 				split(block, size);
@@ -196,7 +192,7 @@ void *os_malloc(size_t size)
 
 			while (block->next)
 				block = block->next;
-			if (block->status == STATUS_FREE) {
+			if (block->status == STATUS_FREE && size < MMAP_THRESHOLD) {
 				expand(block, size, MALLOC);
 				block->status = STATUS_ALLOC;
 			} else {
@@ -261,7 +257,7 @@ void *os_calloc(size_t nmemb, size_t size)
 	} else {
 		struct block_meta *previous = (struct block_meta *)base;
 
-		block = find_memory_block(&previous, size_to_be_allocated);
+		block = find_memory_block(&previous, size_to_be_allocated, getpagesize());
 		// if the block is found and the size is bigger, split it
 		if (block) {
 			if (block->size > size_to_be_allocated)
@@ -272,7 +268,7 @@ void *os_calloc(size_t nmemb, size_t size)
 			block = (struct block_meta *)base;
 			while (block->next)
 				block = block->next;
-			if (block->status == STATUS_FREE) {
+			if (block->status == STATUS_FREE && size_to_be_allocated < (long unsigned int)getpagesize()) {
 				expand(block, size_to_be_allocated, CALLOC);
 				block->status = STATUS_ALLOC;
 			} else {
@@ -335,8 +331,10 @@ void *os_realloc(void *ptr, size_t size)
 			goto exit;
 		} else {
 			// if the block size is smaller, try to expand the block
-			if (expand(block, size, REALLOC))
+			if (expand(block, size, REALLOC)) {
+				block->status = STATUS_ALLOC;
 				goto exit;
+			}
 		}
 		// ultimately, if nothing works, realloc elsewhere
 		block = (struct block_meta *)realloc_new_block(block, ptr, size, movable_size);
