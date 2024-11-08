@@ -38,9 +38,8 @@ struct block_meta *request_space(struct block_meta *previous, size_t size, size_
 		}
 
 		/* attempt to allocate memory using the sbrk() system call */
-		if ((void *)block == (void *) -1) {
+		if ((void *)block == (void *) -1)
 			DIE(1, "sbrk failed to allocate memory :(");
-		}
 
 		block->status = STATUS_ALLOC;
 	} else {
@@ -50,9 +49,9 @@ struct block_meta *request_space(struct block_meta *previous, size_t size, size_
 										  MAP_PRIVATE | MAP_ANONYMOUS,
 										  -1, 0);
 
-		if (block == MAP_FAILED) {
+		if (block == MAP_FAILED)
 			DIE(1, "mmap failed to allocate memory :(");
-		}
+
 		allocated_size = size;
 		block->status = STATUS_MAPPED;
 	}
@@ -153,9 +152,9 @@ struct block_meta *expand(struct block_meta *block, size_t size, int where)
 		size_t increment = size - block->size;
 
 		increment = ALIGN(increment);
-		if (sbrk(increment) == (void *)-1) {
+		if (sbrk(increment) == (void *)-1)
 			DIE(1, "sbrk has failed :(");
-		}
+
 		block->size += increment;
 		return block;
 	}
@@ -268,7 +267,7 @@ void *os_calloc(size_t nmemb, size_t size)
 			block = (struct block_meta *)base;
 			while (block->next)
 				block = block->next;
-			if (block->status == STATUS_FREE && size_to_be_allocated < (long unsigned int)getpagesize()) {
+			if (block->status == STATUS_FREE && size_to_be_allocated < (unsigned long)getpagesize()) {
 				expand(block, size_to_be_allocated, CALLOC);
 				block->status = STATUS_ALLOC;
 			} else {
