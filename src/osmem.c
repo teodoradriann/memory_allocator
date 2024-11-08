@@ -148,7 +148,7 @@ struct block_meta *expand(struct block_meta *block, size_t size, int where)
 			}
 		}
 	}
-	// making sure the block we try to expand is the last non-mapped block and 
+	// making sure the block we try to expand is the last non-mapped block and
 	// if it is we allocate more memory to it
 	bool is_last = true;
 
