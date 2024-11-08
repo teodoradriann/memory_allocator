@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include "block_meta.h"
 #include "osmem.h"
 
@@ -147,8 +148,18 @@ struct block_meta *expand(struct block_meta *block, size_t size, int where)
 			}
 		}
 	}
-	// if next_block is null then we need to allocate more memory to expand
-	if (!next_block) {
+	// making sure the block we try to expand is the last non-mapped block and 
+	// if it is we allocate more memory to it
+	int is_last = true;
+	while (next_block) {
+		if (next_block->status != STATUS_MAPPED) {
+			is_last = false;
+			break;
+		}
+		next_block = next_block->next;
+	}
+	
+	if (is_last) {
 		size_t increment = size - block->size;
 
 		increment = ALIGN(increment);
@@ -189,11 +200,20 @@ void *os_malloc(size_t size)
 			// trying to expand the previous block if it's available
 			block = (struct block_meta *) base;
 
-			while (block->next)
+			struct block_meta *last_non_mapped = block;
+
+			// searching for the last non-mapped block
+			while (block) {
+				if (block->status != STATUS_MAPPED) {
+					last_non_mapped = block;
+				}
 				block = block->next;
-			if (block->status == STATUS_FREE && size < MMAP_THRESHOLD) {
-				expand(block, size, MALLOC);
-				block->status = STATUS_ALLOC;
+			}
+			// if the block is free then try to expand it
+			if (last_non_mapped->status == STATUS_FREE && size < MMAP_THRESHOLD) {
+				expand(last_non_mapped, size, MALLOC);
+				last_non_mapped->status = STATUS_ALLOC;
+				block = last_non_mapped;
 			} else {
 				// no block found call the OS for more space
 				block = request_space(previous, size, MMAP_THRESHOLD);
@@ -263,13 +283,23 @@ void *os_calloc(size_t nmemb, size_t size)
 				split(block, size_to_be_allocated);
 			block->status = STATUS_ALLOC;
 		} else {
-			// trying to expand the previous block if it's available
-			block = (struct block_meta *)base;
-			while (block->next)
+			// trying to expand the last non-mapped block if it's available
+			block = (struct block_meta *) base;
+
+			struct block_meta *last_non_mapped = block;
+
+			// searching for the last non-mapped block
+			while (block) {
+				if (block->status != STATUS_MAPPED) {
+					last_non_mapped = block;
+				}
 				block = block->next;
-			if (block->status == STATUS_FREE && size_to_be_allocated < (unsigned long)getpagesize()) {
-				expand(block, size_to_be_allocated, CALLOC);
-				block->status = STATUS_ALLOC;
+			}
+			// if the block is free then try to expand it
+			if (last_non_mapped->status == STATUS_FREE && size_to_be_allocated < (unsigned long)getpagesize()) {
+				expand(last_non_mapped, size_to_be_allocated, CALLOC);
+				last_non_mapped->status = STATUS_ALLOC;
+				block = last_non_mapped;
 			} else {
 				// no block found call the OS for more space
 				block = request_space(previous, size_to_be_allocated, getpagesize());
