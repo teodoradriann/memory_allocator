@@ -150,7 +150,8 @@ struct block_meta *expand(struct block_meta *block, size_t size, int where)
 	}
 	// making sure the block we try to expand is the last non-mapped block and 
 	// if it is we allocate more memory to it
-	int is_last = true;
+	bool is_last = true;
+
 	while (next_block) {
 		if (next_block->status != STATUS_MAPPED) {
 			is_last = false;
@@ -158,7 +159,7 @@ struct block_meta *expand(struct block_meta *block, size_t size, int where)
 		}
 		next_block = next_block->next;
 	}
-	
+
 	if (is_last) {
 		size_t increment = size - block->size;
 
@@ -204,9 +205,8 @@ void *os_malloc(size_t size)
 
 			// searching for the last non-mapped block
 			while (block) {
-				if (block->status != STATUS_MAPPED) {
+				if (block->status != STATUS_MAPPED)
 					last_non_mapped = block;
-				}
 				block = block->next;
 			}
 			// if the block is free then try to expand it
@@ -290,9 +290,8 @@ void *os_calloc(size_t nmemb, size_t size)
 
 			// searching for the last non-mapped block
 			while (block) {
-				if (block->status != STATUS_MAPPED) {
+				if (block->status != STATUS_MAPPED)
 					last_non_mapped = block;
-				}
 				block = block->next;
 			}
 			// if the block is free then try to expand it
